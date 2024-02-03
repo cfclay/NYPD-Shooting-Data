@@ -1,0 +1,142 @@
+---
+title: "NYPD Shooting Data Assignment"
+date: "2023-12-05"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+
+```
+
+## New York Police Department Shooting Incident Data
+  Using the provided shooting data from the New York City Police Department, the following analysis was completed which focuses on fatal shooting incidents in New York City from January 1st, 2006 to December 31st, 2022. Data of shooting incidents without a fatality are not included. 
+```{r import csv data, include=TRUE, message=FALSE, warning=FALSE}
+# Importing shooting data from NYPD
+nypd_data <- read_csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
+               
+```
+
+### Fatal Shootings by Borough
+  In order to understand the rates of fatal shootings throughout the various borough's of New York City, data was filtered by borough and the summation of fatal shootings for each year. In the bar graph below, the five borough's of New York City, Bronx, Brooklyn, Manhattan, Queens, and State Island, are shown with their corresponding number of fatal shootings from the year 2006 to 2022. The blue gradient contained within each bar represents the number of fatal shootings for each year. 
+
+```{r borough data, fig.align='center', include=TRUE}
+# Filtering out data to only include date, borough, and if the shooting was fatal or not
+by_borough <- nypd_data %>%
+  select('OCCUR_DATE', 'BORO', STATISTICAL_MURDER_FLAG)
+
+# Filtering out all non-fatal shootings
+by_borough <- by_borough %>% filter(STATISTICAL_MURDER_FLAG, .preserve = TRUE)
+
+# Renaming columns and changing date format
+by_borough <- by_borough %>%
+  rename(date = 'OCCUR_DATE') %>%
+  mutate(date = mdy(date)) %>%
+  rename(Borough = "BORO")
+
+# Determining the number of fatal shooting by borough and year
+count_by_borough <- count(by_borough, date, Borough) %>%
+  group_by(year = lubridate::floor_date(date, "year")) %>%
+  rename(Fatal_Shootings = n)
+
+# Plot of filtered data by borough
+ggplot(data = count_by_borough, mapping = aes(x = Borough, y = Fatal_Shootings)) +
+  geom_bar(stat = "identity", aes(x = Borough, y = Fatal_Shootings, fill = year)) +
+  labs(title = "Fatal Shootings Per Borough (2006 - 2022)", y = NULL) +
+  labs(y = "Fatal Shootings", x ="Borough")
+
+
+```
+
+
+### Fatal Shootings by Precinct
+  Further analysis was completed by graphing fatal shootings by each precinct. The bar graph below shows the total number of fatal shootings by each precinct from 2006 to 2022. It is important to note that precinct numbers are not entirely sequential from the standpoint that gaps exist in the current precinct numbering system used in New York City. For example, the following precincts to do not exist: 2nd precinct, 3rd precinct, 4th precinct, and 8th precinct. Other gaps exist in the New York City precinct numbering system. 
+  
+
+```{r precinct data, fig.align='center', include=TRUE}
+# Filtering out data to only include date, precinct, and if the shooting was fatal or not
+by_precinct <- nypd_data %>%
+  select('OCCUR_DATE', PRECINCT, STATISTICAL_MURDER_FLAG)
+
+# Filtering out all non-fatal shootings
+by_precinct <- by_precinct %>% filter(STATISTICAL_MURDER_FLAG, .preserve = TRUE)
+
+# Renaming columns and changing date format
+by_precinct <- by_precinct %>%
+  rename(date = 'OCCUR_DATE') %>%
+  mutate(date = mdy(date)) %>%
+  rename(Precinct = PRECINCT)
+
+# Determining the number of fatal shooting by precinct
+count_by_precinct <- count(by_precinct, Precinct) %>%
+  rename(Fatal_Shootings = n)
+
+# Plot of filtered data by precinct
+ggplot(data = count_by_precinct, mapping = aes(x = Precinct, y = Fatal_Shootings)) +
+  geom_bar(stat = "identity", aes(fill = "Fatal Shootings")) +
+  theme(legend.position = "right", axis.text.x = element_text(angle = 90)) + 
+  labs(title = "Fatal Shootings Per Precinct (2006 - 2022)", y = NULL) +
+  labs(y = "Fatal Shootings", x ="Precinct")
+
+```
+
+### Fatal Shootings Per Month
+  In order to understand the change in fatal shootings in New York City over time, the following analysis was performed by taking the summation of fatal shootings for each month between January 2006 and December 2022. In the graph below, the fatal shootings for each month are plotted. Each point on the graph is the summation of fatal shootings per each month. 
+
+
+```{r fatal shootings per month, fig.align='center', include=TRUE}
+# Determining the number of fatal shooting by date
+count_by_date <- count(by_precinct, date) %>%
+  rename(fatal_shootings = n)
+
+# Determining the number of fatal shooting per month
+count_by_month <- count_by_date %>%
+  group_by(month = lubridate::floor_date(date, "month")) %>%
+  summarize(fatal_shooting_month = sum(fatal_shootings))
+
+# Plot of filtered data by month
+ggplot(data = count_by_month, aes(x = month, y = fatal_shooting_month)) +
+  geom_line(aes(y = fatal_shooting_month, color = "Fatal Shootings")) +
+  geom_point(aes(y = fatal_shooting_month, color = "Fatal Shootings")) +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 90)) + 
+  labs(title = "Fatal Shootings Per Month (2006 - 2022)", y = NULL) +
+  labs(y = "Fatal Shootings", x ="Month")
+
+```
+
+### Fatal Shootings Per Month With Model
+Using the data of fatal shooting per month in New York City from 2006 to 2022, a model was created in order to understand the trend of fatal shootings and whether the rate of fatal shootings is predicted to increase or decrease. In the graph below, the red line represents the summation of fatal shootings per each month between 2006 and 2022 as shown in the graph above. The blue line represents the created model. As can be seen in the below graph, the model has a negative slope indicating a decrease in the number of fatal shootings over time. This model could be used to predict a steady decrease of total fatal shootings per year in New York City going forward and overall less fatal shooting in the future. 
+
+```{r fatal shootings per month model, fig.align='center', include=TRUE}
+# Creating model based of fatal shootings per month
+mod <- lm(fatal_shooting_month ~ month, data = count_by_month)
+
+# Creating prediction based off model
+count_by_date_w_pred <- count_by_month %>% mutate(pred = predict(mod))
+
+# Plotting model with fatal shooting data
+ggplot(data = count_by_date_w_pred) +
+  geom_line(aes(x = month, y = fatal_shooting_month), color = "red") + 
+  geom_line(aes(x = month, y = pred), color = "blue") +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 90)) + 
+  labs(title = "Fatal Shootings Per Month With Prediction", y = NULL) +
+  labs(title = "Fatal Shootings Per Month (2006 - 2022)", y = NULL) +
+  labs(y = "Fatal Shootings", x ="Month")
+
+```
+
+
+### Potential Study Bias
+  When using the results of the analysis included in this report, a couple sources of bias should be taken into consideration. The first potential source of bias is the source of data being the New York Police Department. The New York Police Department has a vested interest in data showing the effectiveness of the department especially when considering potential ramifications of an ineffective police force could result in funding decreases. While ideally fatal shootings should always involve police involvement and therefore, police department data should ideally be reliable and accurate, this bias is still important to note. Additional sources with data on fatal shootings would be important to consider in order to determine a better understanding of any potential current or future trends. 
+  
+  Another potential source of trend distortion is the events of COVID-19 on violent incidents. The impact of restrictions by local governments in order to reduce the movement of people, workforce disruptions resulting in changes to unemployment, and also potential impacts to police departments. COVID-19 may have resulted in disorganization to police departments and the number of active police officers due to various factors such as funding and policies put in place by the department to combat COVID-19. While it would likely be difficult to account for these impacts, the influence this global pandemic had should not be ignored.
+  
+  
+```{r session info, include=TRUE}
+sessionInfo()
+```
